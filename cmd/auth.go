@@ -41,7 +41,7 @@ func loginCmd() *cobra.Command {
 		return authCode, nil
 	}
 
-	var email, password, authCode string
+	var email, password, authCode, country string
 
 	cmd := &cobra.Command{
 		Use:   "login",
@@ -81,12 +81,14 @@ func loginCmd() *cobra.Command {
 					Str("password", password).
 					Str("email", email).
 					Str("authCode", util.IfEmpty(authCode, "<nil>")).
+					Str("country", util.IfEmpty(country, "<not specified>")).
 					Msg("logging in")
 
 				output, err := dependencies.AppStore.Login(appstore.LoginInput{
 					Email:    email,
 					Password: password,
 					AuthCode: authCode,
+					Country:  country,
 				})
 				if err != nil {
 					if errors.Is(err, appstore.ErrAuthCodeRequired) && !interactive {
@@ -98,9 +100,26 @@ func loginCmd() *cobra.Command {
 					return err
 				}
 
+				// Derive country code from storefront for logging
+				countryCode := "unknown"
+				if output.Account.StoreFront != "" {
+					if derivedCountry, err := appstore.CountryCodeFromStoreFront(output.Account.StoreFront); err == nil {
+						countryCode = derivedCountry
+					}
+				}
+
+				dependencies.Logger.Verbose().
+					Str("storefront", output.Account.StoreFront).
+					Str("derivedCountry", countryCode).
+					Str("fallbackCountry", util.IfEmpty(country, "<none>")).
+					Bool("storefrontFallbackUsed", country != "" && output.Account.StoreFront != "").
+					Msg("storefront detection")
+
 				dependencies.Logger.Log().
 					Str("name", output.Account.Name).
 					Str("email", output.Account.Email).
+					Str("storefront", output.Account.StoreFront).
+					Str("country", countryCode).
 					Bool("success", true).
 					Send()
 
@@ -122,6 +141,7 @@ func loginCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&email, "email", "e", "", "email address for the Apple ID (required)")
 	cmd.Flags().StringVarP(&password, "password", "p", "", "password for the Apple ID (required)")
 	cmd.Flags().StringVar(&authCode, "auth-code", "", "2FA code for the Apple ID")
+	cmd.Flags().StringVarP(&country, "country", "c", "", "country code for the Apple ID (e.g., 'US', 'GB', 'DE') - used when storefront detection fails")
 
 	_ = cmd.MarkFlagRequired("email")
 
@@ -139,9 +159,19 @@ func infoCmd() *cobra.Command {
 				return err
 			}
 
+			// Derive country code from storefront for logging
+			countryCode := "unknown"
+			if output.Account.StoreFront != "" {
+				if derivedCountry, err := appstore.CountryCodeFromStoreFront(output.Account.StoreFront); err == nil {
+					countryCode = derivedCountry
+				}
+			}
+
 			dependencies.Logger.Log().
 				Str("name", output.Account.Name).
 				Str("email", output.Account.Email).
+				Str("storefront", output.Account.StoreFront).
+				Str("country", countryCode).
 				Bool("success", true).
 				Send()
 

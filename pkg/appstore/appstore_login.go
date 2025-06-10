@@ -20,6 +20,7 @@ type LoginInput struct {
 	Email    string
 	Password string
 	AuthCode string
+	Country  string
 }
 
 type LoginOutput struct {
@@ -34,7 +35,7 @@ func (t *appstore) Login(input LoginInput) (LoginOutput, error) {
 
 	guid := strings.ReplaceAll(strings.ToUpper(macAddr), ":", "")
 
-	acc, err := t.login(input.Email, input.Password, input.AuthCode, guid)
+	acc, err := t.login(input.Email, input.Password, input.AuthCode, input.Country, guid)
 	if err != nil {
 		return LoginOutput{}, err
 	}
@@ -62,7 +63,7 @@ type loginResult struct {
 	PasswordToken       string             `plist:"passwordToken,omitempty"`
 }
 
-func (t *appstore) login(email, password, authCode, guid string) (Account, error) {
+func (t *appstore) login(email, password, authCode, country, guid string) (Account, error) {
 	redirect := ""
 
 	var (
@@ -73,7 +74,7 @@ func (t *appstore) login(email, password, authCode, guid string) (Account, error
 	retry := true
 
 	for attempt := 1; retry && attempt <= 4; attempt++ {
-		request := t.loginRequest(email, password, authCode, guid, attempt)
+		request := t.loginRequest(email, password, authCode, country, guid, attempt)
 		request.URL, _ = util.IfEmpty(redirect, request.URL), ""
 		res, err = t.loginClient.Send(request)
 
@@ -91,8 +92,17 @@ func (t *appstore) login(email, password, authCode, guid string) (Account, error
 	}
 
 	sf, err := res.GetHeader(HTTPHeaderStoreFront)
-	if err != nil {
-		return Account{}, NewErrorWithMetadata(fmt.Errorf("failed to get storefront header: %w", err), res)
+	if err != nil || sf == "" {
+		// Fallback to user-specified country if storefront header is missing or empty
+		if country != "" {
+			if isValidCountryCode(country) {
+				sf = storeFronts[strings.ToUpper(country)]
+			} else {
+				return Account{}, NewErrorWithMetadata(fmt.Errorf("invalid country code '%s'; use a valid ISO country code like 'US', 'GB', 'DE', etc.", country), res)
+			}
+		} else {
+			return Account{}, NewErrorWithMetadata(fmt.Errorf("failed to get storefront header and no country specified: %w; use the --country flag to specify your country (e.g., --country US)", err), res)
+		}
 	}
 
 	addr := res.Data.Account.Address
@@ -150,7 +160,7 @@ func (t *appstore) parseLoginResponse(res *http.Result[loginResult], attempt int
 	return retry, redirect, err
 }
 
-func (t *appstore) loginRequest(email, password, authCode, guid string, attempt int) http.Request {
+func (t *appstore) loginRequest(email, password, authCode, country, guid string, attempt int) http.Request {
 	return http.Request{
 		Method:         http.MethodPOST,
 		URL:            fmt.Sprintf("https://%s%s", PrivateAppStoreAPIDomain, PrivateAppStoreAPIPathAuthenticate),

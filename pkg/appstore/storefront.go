@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-func countryCodeFromStoreFront(storeFront string) (string, error) {
+// CountryCodeFromStoreFront converts a storefront ID to country code
+func CountryCodeFromStoreFront(storeFront string) (string, error) {
 	for key, val := range storeFronts {
 		parts := strings.Split(storeFront, "-")
 
@@ -15,6 +16,12 @@ func countryCodeFromStoreFront(storeFront string) (string, error) {
 	}
 
 	return "", fmt.Errorf("country code mapping for store front (%s) was not found", storeFront)
+}
+
+// isValidCountryCode checks if a country code is supported
+func isValidCountryCode(countryCode string) bool {
+	_, exists := storeFronts[strings.ToUpper(countryCode)]
+	return exists
 }
 
 var storeFronts = map[string]string{

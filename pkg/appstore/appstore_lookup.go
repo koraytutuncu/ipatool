@@ -19,7 +19,7 @@ type LookupOutput struct {
 }
 
 func (t *appstore) Lookup(input LookupInput) (LookupOutput, error) {
-	countryCode, err := countryCodeFromStoreFront(input.Account.StoreFront)
+	countryCode, err := CountryCodeFromStoreFront(input.Account.StoreFront)
 	if err != nil {
 		return LookupOutput{}, fmt.Errorf("failed to resolve the country code: %w", err)
 	}
